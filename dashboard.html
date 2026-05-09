@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GetIntoAdmission — Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="bg-white border-b px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white font-bold text-lg">G</span>
+      <span class="font-bold text-gray-800 text-lg">GetIntoAdmission — Leads</span>
+    </div>
+    <div class="flex items-center gap-6">
+      <div id="stats" class="flex gap-6 text-sm text-gray-500"></div>
+      <button onclick="logout()" class="text-sm text-red-500 hover:text-red-700 font-semibold">Logout</button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8">
+    <div class="flex flex-wrap gap-3 mb-6">
+      <input id="search" type="text" placeholder="Search name, email, phone…"
+        class="border rounded-lg px-4 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-orange-400" />
+      <select id="filter-exam" class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+        <option value="">All Exams</option>
+        <option>KCET</option><option>COMEDK</option><option>JEE Main</option>
+        <option>PESSAT</option><option>CUET</option><option>Not appeared yet</option>
+      </select>
+      <button onclick="loadLeads()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">Refresh</button>
+      <button onclick="exportCSV()" class="border border-gray-300 hover:bg-gray-100 text-sm font-semibold px-4 py-2 rounded-lg">Export CSV</button>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b text-xs uppercase tracking-wider text-gray-500">
+          <tr>
+            <th class="px-4 py-3 text-left">#</th>
+            <th class="px-4 py-3 text-left">Name</th>
+            <th class="px-4 py-3 text-left">Phone</th>
+            <th class="px-4 py-3 text-left">Email</th>
+            <th class="px-4 py-3 text-left">State</th>
+            <th class="px-4 py-3 text-left">Exam</th>
+            <th class="px-4 py-3 text-left">Rank</th>
+            <th class="px-4 py-3 text-left">Branch</th>
+            <th class="px-4 py-3 text-left">Message</th>
+            <th class="px-4 py-3 text-left">Date</th>
+            <th class="px-4 py-3 text-left">Action</th>
+          </tr>
+        </thead>
+        <tbody id="leads-body" class="divide-y divide-gray-100 text-gray-700"></tbody>
+      </table>
+      <div id="empty" class="hidden text-center py-16 text-gray-400">No leads found.</div>
+    </div>
+  </main>
+
+  <script>
+    let allLeads = [];
+
+    function token() { return localStorage.getItem('getintoadmission_token'); }
+
+    function logout() {
+      localStorage.removeItem('getintoadmission_token');
+      location.href = '/login';
+    }
+
+    async function loadLeads() {
+      const res = await fetch('/api/leads', {
+        headers: { 'Authorization': 'Bearer ' + token() }
+      });
+      if (res.status === 401) return location.href = '/login';
+      allLeads = await res.json();
+      renderLeads();
+    }
+
+    function renderLeads() {
+      const search = document.getElementById('search').value.toLowerCase();
+      const exam   = document.getElementById('filter-exam').value;
+      let data = allLeads.filter(l => {
+        const ms = !search || (l.name||'').toLowerCase().includes(search) ||
+          (l.email||'').toLowerCase().includes(search) || (l.phone||'').includes(search);
+        return ms && (!exam || l.exam === exam);
+      });
+
+      const tbody = document.getElementById('leads-body');
+      document.getElementById('empty').classList.toggle('hidden', data.length > 0);
+      if (!data.length) { tbody.innerHTML = ''; return; }
+
+      tbody.innerHTML = data.map((l, i) => `
+        <tr class="hover:bg-orange-50 transition-colors">
+          <td class="px-4 py-3 text-gray-400">${i+1}</td>
+          <td class="px-4 py-3 font-semibold text-gray-900">${esc(l.name)}</td>
+          <td class="px-4 py-3"><a href="tel:${esc(l.phone)}" class="text-orange-600 hover:underline">${esc(l.phone)}</a></td>
+          <td class="px-4 py-3"><a href="mailto:${esc(l.email)}" class="text-blue-600 hover:underline">${esc(l.email)}</a></td>
+          <td class="px-4 py-3">${esc(l.state)}</td>
+          <td class="px-4 py-3"><span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-xs font-semibold">${esc(l.exam)}</span></td>
+          <td class="px-4 py-3">${esc(l.rank)}</td>
+          <td class="px-4 py-3 max-w-[160px] truncate" title="${esc(l.branch)}">${esc(l.branch)}</td>
+          <td class="px-4 py-3 max-w-[160px] truncate text-gray-500" title="${esc(l.message)}">${esc(l.message)}</td>
+          <td class="px-4 py-3 text-gray-400 whitespace-nowrap">${new Date(l.submittedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</td>
+          <td class="px-4 py-3"><button onclick="deleteLead('${l._id}')" class="text-red-400 hover:text-red-600 text-xs font-semibold">Delete</button></td>
+        </tr>`).join('');
+
+      document.getElementById('stats').innerHTML =
+        `<span>Total: <strong class="text-gray-800">${allLeads.length}</strong></span>
+         <span>Showing: <strong class="text-gray-800">${data.length}</strong></span>`;
+    }
+
+    async function deleteLead(id) {
+      if (!confirm('Delete this lead?')) return;
+      await fetch('/api/leads?id=' + id, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + token() }
+      });
+      loadLeads();
+    }
+
+    function exportCSV() {
+      const headers = ['Name','Email','Phone','State','Exam','Rank','Branch','Message','Date'];
+      const rows = allLeads.map(l => [
+        l.name,l.email,l.phone,l.state,l.exam,l.rank,l.branch,l.message,
+        new Date(l.submittedAt).toLocaleString('en-IN')
+      ].map(v => `"${(v||'').replace(/"/g,'""')}"`));
+      const csv = [headers,...rows].map(r=>r.join(',')).join('\n');
+      const a = document.createElement('a');
+      a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+      a.download = 'getintoadmission-leads.csv'; a.click();
+    }
+
+    function esc(v) {
+      return (v||'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    document.getElementById('search').addEventListener('input', renderLeads);
+    document.getElementById('filter-exam').addEventListener('change', renderLeads);
+
+    if (!token()) location.href = '/login';
+    else loadLeads();
+  </script>
+</body>
+</html>

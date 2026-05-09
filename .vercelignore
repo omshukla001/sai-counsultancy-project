@@ -1,0 +1,6 @@
+*.mov
+*.mp4
+server/
+.claude/
+sai-bhaiya.jpg
+public/
